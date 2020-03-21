@@ -7,16 +7,16 @@ import (
 	"strings"
 )
 
-func start() position {
-	board, _ := fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBKQBNR")
-	return position{
+func start() Position {
+	board, _ := FEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBKQBNR")
+	return Position{
 		board: board,
 	}
 }
 
 func cli() {
 	pos := start()
-	searcher := &searcher{tp: map[position]entry{}}
+	searcher := &Searcher{tp: map[Position]entry{}}
 	r := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Println(pos.board)
@@ -26,16 +26,16 @@ func cli() {
 			input, _ := r.ReadString('\n')
 			input = strings.TrimSpace(input)
 			valid = false
-			for _, m := range pos.moves() {
+			for _, m := range pos.Moves() {
 				if input == m.String() {
-					pos = pos.move(m)
+					pos = pos.Move(m)
 					valid = true
 					break
 				}
 			}
 		}
-		fmt.Println(pos.rotate().board)
-		m := searcher.search(pos, 10000)
+		fmt.Println(pos.Flip().board)
+		m := searcher.Search(pos, 10000)
 		score := pos.value(m)
 		if score <= -MateValue {
 			fmt.Println("You won")
@@ -45,16 +45,16 @@ func cli() {
 			fmt.Println("You lost")
 			return
 		}
-		pos = pos.move(m)
+		pos = pos.Move(m)
 	}
 }
 
 func uci() {
 	pos := start()
-	searcher := &searcher{tp: map[position]entry{}}
+	searcher := &Searcher{tp: map[Position]entry{}}
 	r := bufio.NewReader(os.Stdin)
-	sqr := map[string]square{}
-	for i := square(0); i < 120; i++ {
+	sqr := map[string]Square{}
+	for i := Square(0); i < 120; i++ {
 		sqr[i.String()] = i
 	}
 	white := true
@@ -77,21 +77,21 @@ func uci() {
 			pos = start()
 			moves := strings.Split(input[24:], " ")
 			for i, s := range moves {
-				m := move{from: sqr[s[0:2]], to: sqr[s[2:4]]}
+				m := Move{from: sqr[s[0:2]], to: sqr[s[2:4]]}
 				if i%2 != 0 {
-					m = move{from: 119 - m.from, to: 119 - m.to}
+					m = Move{from: m.from.Flip(), to: m.to.Flip()}
 				}
-				pos = pos.move(m)
+				pos = pos.Move(m)
 			}
 			white = len(moves)%2 == 0
 		case strings.HasPrefix(input, "position fen "):
-			b, _ := fen(input[13:])
+			b, _ := FEN(input[13:])
 			fmt.Println(b)
-			pos = position{board: b}
+			pos = Position{board: b}
 		case strings.HasPrefix(input, "go"):
-			m := searcher.search(pos, 10000)
+			m := searcher.Search(pos, 10000)
 			if !white {
-				m = move{from: 119 - m.from, to: 119 - m.to}
+				m = Move{from: m.from.Flip(), to: m.to.Flip()}
 			}
 			fmt.Println("bestmove", m)
 		}

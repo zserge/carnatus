@@ -14,22 +14,22 @@ func abs(n int) int { return int((int64(n) ^ int64(n)>>63) - int64(n)>>63) }
 // K=king. Opponent pieces are represented as lowercase letters. Also there are
 // two special values - whitespace (non-playable part of the board) and dot
 // (empty square on the board).
-type piece byte
+type Piece byte
 
 // Value returns a numerical value of a piece. It is only calculated for our pieces.
-func (p piece) value() int {
-	return map[piece]int{'P': 100, 'N': 280, 'B': 320, 'R': 479, 'Q': 929, 'K': 60000}[p]
+func (p Piece) value() int {
+	return map[Piece]int{'P': 100, 'N': 280, 'B': 320, 'R': 479, 'Q': 929, 'K': 60000}[p]
 }
 
 // Ours returns true if a piece belongs to the current player and false if it
 // belongs to opponent.
-func (p piece) ours() bool { return p.value() > 0 }
+func (p Piece) ours() bool { return p.value() > 0 }
 
 // Flip returns the same piece but belonging to the opposite player. It flips
 // the case of the piece letter. For player-neutral pieces (whitespaces and
 // dots) it returns the same value without any modifications.
-func (p piece) flip() piece {
-	return map[piece]piece{'P': 'p', 'N': 'n', 'B': 'b', 'R': 'r', 'Q': 'q', 'K': 'k', 'p': 'P', 'n': 'N', 'b': 'B', 'r': 'R', 'q': 'Q', 'k': 'K', ' ': ' ', '.': '.'}[p]
+func (p Piece) Flip() Piece {
+	return map[Piece]Piece{'P': 'p', 'N': 'n', 'B': 'b', 'R': 'r', 'Q': 'q', 'K': 'k', 'p': 'P', 'n': 'N', 'b': 'B', 'r': 'R', 'q': 'Q', 'k': 'K', ' ': ' ', '.': '.'}[p]
 }
 
 // Board is a 8x8 chess board with pieces, empty squares and padding (2 rows
@@ -37,13 +37,13 @@ func (p piece) flip() piece {
 // geometry of the board is 12 rows x 10 colums, 120 squares in total. An array
 // is used instead of a slice to ensure the geometry is fixed and to make it
 // possible to use Board type directly as map keys.
-type Board [120]piece
+type Board [120]Piece
 
 // Swap changes the side of the board, rotating it. It basically copies pieces
 // in the reverse order flipping their case.
-func (a Board) Swap() (b Board) {
+func (a Board) Flip() (b Board) {
 	for i := len(a) - 1; i >= 0; i-- {
-		b[i] = a[len(a)-i-1].flip()
+		b[i] = a[len(a)-i-1].Flip()
 	}
 	return b
 }
@@ -63,7 +63,7 @@ func (a Board) String() (s string) {
 
 // FEN returns a board created from the given FEN (Forsyth-Edwards Notation)
 // string. If a string is not a valid FEN encoding - and error is returned.
-func fen(fen string) (b Board, err error) {
+func FEN(fen string) (b Board, err error) {
 	parts := strings.Split(fen, " ")
 	rows := strings.Split(parts[0], "/")
 	if len(rows) != 8 {
@@ -75,13 +75,13 @@ func fen(fen string) (b Board, err error) {
 	for i := 0; i < 8; i++ {
 		index := i*10 + 21
 		for _, c := range rows[i] {
-			q := piece(c)
+			q := Piece(c)
 			if q >= '1' && q <= '8' {
-				for j := piece(0); q-j >= '1'; j++ {
+				for j := Piece(0); q-j >= '1'; j++ {
 					b[index] = '.'
 					index++
 				}
-			} else if q.value() == 0 && q.flip().value() == 0 {
+			} else if q.value() == 0 && q.Flip().value() == 0 {
 				return b, errors.New("invalid piece value: " + string(c))
 			} else {
 				b[index] = q
@@ -93,60 +93,61 @@ func fen(fen string) (b Board, err error) {
 		}
 	}
 	if len(parts) > 1 && parts[1] == "b" {
-		b = b.Swap()
+		b = b.Flip()
 	}
 	return b, nil
 }
 
 // Square represents an index of the chess board.
-type square int
+type Square int
 
 // Corner coordinates for simpler board arithmetics
-const A1, H1, A8, H8 square = 91, 98, 21, 28
+const A1, H1, A8, H8 Square = 91, 98, 21, 28
 
-func (s square) String() string { return string([]byte{" abcdefgh "[s%10], "  87654321  "[s/10]}) }
+func (s Square) Flip() Square   { return 119 - s }
+func (s Square) String() string { return string([]byte{" abcdefgh "[s%10], "  87654321  "[s/10]}) }
 
 // Move direction constants, horizontal moves +/-1, vertical moves +/-10
 const N, E, S, W = -10, 1, 10, -1
 
 // Move represents a movement of a piece from one square to another.
-type move struct {
-	from square
-	to   square
+type Move struct {
+	from Square
+	to   Square
 }
 
 // Moves are printed in algebraic notation, i.e "e2e4".
-func (m move) String() string { return m.from.String() + m.to.String() }
+func (m Move) String() string { return m.from.String() + m.to.String() }
 
 // Position describes a board with the current game state (en passant and castling rules).
-type position struct {
+type Position struct {
 	board Board   // current board
 	score int     // board score, the higher the better
 	wc    [2]bool // white castling possibilities
 	bc    [2]bool // black castling possibilities
-	ep    square  // en-passant square where pawn can be captured
-	kp    square  // king passent during castling, where kind can be captured
+	ep    Square  // en-passant square where pawn can be captured
+	kp    Square  // king passent during castling, where kind can be captured
 }
 
 // Rotate returns a modified position where the board is flipped, score is
 // inverted, castling rules are preserved, en-passant and king passant rules
 // are reset.
-func (pos position) rotate() position {
-	np := position{
+func (pos Position) Flip() Position {
+	np := Position{
 		score: -pos.score,
 		wc:    [2]bool{pos.bc[0], pos.bc[1]},
 		bc:    [2]bool{pos.wc[0], pos.wc[1]},
-		ep:    119 - pos.ep,
-		kp:    119 - pos.kp,
+		ep:    pos.ep.Flip(),
+		kp:    pos.kp.Flip(),
 	}
-	np.board = pos.board.Swap()
+	np.board = pos.board.Flip()
 	return np
 }
 
 // Moves returns a list of all valid moves for the current board position.
-func (pos position) moves() (moves []move) {
+func (pos Position) Moves() (moves []Move) {
 	// All possible movement directions for each piece type
-	var directions = map[piece][]square{
+	var directions = map[Piece][]Square{
 		'P': {N, N + N, N + W, N + E},
 		'N': {N + N + E, E + N + E, E + S + E, S + S + E, S + S + W, W + S + W, W + N + W, N + N + W},
 		'B': {N + E, S + E, S + W, N + W},
@@ -159,7 +160,7 @@ func (pos position) moves() (moves []move) {
 		if !p.ours() {
 			continue
 		}
-		i := square(index)
+		i := Square(index)
 		// Iterate over all move directions for the given piece
 		for _, d := range directions[p] {
 			for j := i + d; ; j = j + d {
@@ -178,17 +179,17 @@ func (pos position) moves() (moves []move) {
 						break
 					}
 				}
-				moves = append(moves, move{from: i, to: j})
+				moves = append(moves, Move{from: i, to: j})
 				// Crawling pieces should stop after a single move
 				if p == 'P' || p == 'N' || p == 'K' || (q != ' ' && q != '.' && !q.ours()) {
 					break
 				}
 				// Castling rules
 				if i == A1 && pos.board[j+E] == 'K' && pos.wc[0] {
-					moves = append(moves, move{from: j + E, to: j + W})
+					moves = append(moves, Move{from: j + E, to: j + W})
 				}
 				if i == H1 && pos.board[j+W] == 'K' && pos.wc[1] {
-					moves = append(moves, move{from: j + W, to: j + E})
+					moves = append(moves, Move{from: j + W, to: j + E})
 				}
 			}
 		}
@@ -197,7 +198,7 @@ func (pos position) moves() (moves []move) {
 }
 
 // Move returns a modified rotated position after the move is applied.
-func (pos position) move(m move) (np position) {
+func (pos Position) Move(m Move) (np Position) {
 	i, j, p := m.from, m.to, pos.board[m.from]
 	np = pos
 	np.ep = 0
@@ -242,12 +243,12 @@ func (pos position) move(m move) (np position) {
 			np.board[j+S] = '.'
 		}
 	}
-	return np.rotate()
+	return np.Flip()
 }
 
 // Value returns the score of the current position if the move is applied.
-func (pos position) value(m move) int {
-	pst := map[piece][120]int{
+func (pos Position) value(m Move) int {
+	pst := map[Piece][120]int{
 		'P': {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 178, 183, 186, 173, 202, 182, 185, 190, 0, 0, 107, 129, 121, 144, 140, 131, 144, 107, 0, 0, 83, 116, 98, 115, 114, 0, 115, 87, 0, 0, 74, 103, 110, 109, 106, 101, 0, 77, 0, 0, 78, 109, 105, 89, 90, 98, 103, 81, 0, 0, 69, 108, 93, 63, 64, 86, 103, 69, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		'N': {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 214, 227, 205, 205, 270, 225, 222, 210, 0, 0, 277, 274, 380, 244, 284, 342, 276, 266, 0, 0, 290, 347, 281, 354, 353, 307, 342, 278, 0, 0, 304, 304, 325, 317, 313, 321, 305, 297, 0, 0, 279, 285, 311, 301, 302, 315, 282, 0, 0, 0, 262, 290, 293, 302, 298, 295, 291, 266, 0, 0, 257, 265, 282, 0, 282, 0, 257, 260, 0, 0, 206, 257, 254, 256, 261, 245, 258, 211, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		'B': {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 261, 242, 238, 244, 297, 213, 283, 270, 0, 0, 309, 340, 355, 278, 281, 351, 322, 298, 0, 0, 311, 359, 288, 361, 372, 310, 348, 306, 0, 0, 345, 337, 340, 354, 346, 345, 335, 330, 0, 0, 333, 330, 337, 343, 337, 336, 0, 327, 0, 0, 334, 345, 344, 335, 328, 345, 340, 335, 0, 0, 339, 340, 331, 326, 327, 326, 340, 336, 0, 0, 313, 322, 305, 308, 306, 305, 310, 310, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -257,14 +258,14 @@ func (pos position) value(m move) int {
 	}
 
 	i, j := m.from, m.to
-	p, q := piece(pos.board[i]), piece(pos.board[j])
+	p, q := Piece(pos.board[i]), Piece(pos.board[j])
 	score := pst[p][j] - pst[p][i]
 	if q != '.' && q != ' ' && !q.ours() {
-		score += pst[q.flip()][119-j]
+		score += pst[q.Flip()][j.Flip()]
 	}
 	// Castling check direction
 	if abs(int(j-pos.kp)) < 2 {
-		score += pst['K'][119-j]
+		score += pst['K'][j.Flip()]
 	}
 	// Castling
 	if p == 'K' && (abs(int(i-j)) == 2) {
@@ -282,7 +283,7 @@ func (pos position) value(m move) int {
 		}
 		// En-passant capture
 		if j == pos.ep {
-			score += pst['P'][119-(j+S)]
+			score += pst['P'][(j + S).Flip()]
 		}
 	}
 	return score
@@ -290,7 +291,7 @@ func (pos position) value(m move) int {
 
 var (
 	// MateValue is a position score at checkmate
-	MateValue = piece('K').value() + 10*piece('Q').value()
+	MateValue = Piece('K').value() + 10*Piece('Q').value()
 	// MaxTableSize defines how many positions to keep in transposition table
 	MaxTableSize = 10000000
 	// EvalRoughness is used in search algorithm
@@ -301,16 +302,16 @@ type entry struct {
 	depth int
 	score int
 	gamma int
-	move  move
+	move  Move
 }
 
 // Searcher is an recursive alpha-beta search algorithm with transposition memory
-type searcher struct {
-	tp    map[position]entry
+type Searcher struct {
+	tp    map[Position]entry
 	nodes int
 }
 
-func (s *searcher) bound(pos position, gamma, depth int) (score int) {
+func (s *Searcher) bound(pos Position, gamma, depth int) (score int) {
 	s.nodes++
 	e, ok := s.tp[pos]
 	if ok && e.depth >= depth && ((e.score < e.gamma && e.score < gamma) ||
@@ -322,19 +323,19 @@ func (s *searcher) bound(pos position, gamma, depth int) (score int) {
 	}
 	nullScore := pos.score
 	if depth > 0 {
-		nullScore = -s.bound(pos.rotate(), 1-gamma, depth-3)
+		nullScore = -s.bound(pos.Flip(), 1-gamma, depth-3)
 	}
 	if nullScore >= gamma {
 		return nullScore
 	}
 
-	bestScore, bestMove := -3*MateValue, move{}
+	bestScore, bestMove := -3*MateValue, Move{}
 
-	for _, m := range pos.moves() {
+	for _, m := range pos.Moves() {
 		if depth <= 0 && pos.value(m) < 150 {
 			break
 		}
-		score := -s.bound(pos.move(m), 1-gamma, depth-1)
+		score := -s.bound(pos.Move(m), 1-gamma, depth-1)
 		if score > bestScore {
 			bestScore, bestMove = score, m
 		}
@@ -353,14 +354,14 @@ func (s *searcher) bound(pos position, gamma, depth int) (score int) {
 	if !ok || depth >= e.depth && bestScore >= gamma {
 		s.tp[pos] = entry{depth: depth, score: bestScore, gamma: gamma, move: bestMove}
 		if len(s.tp) > MaxTableSize {
-			s.tp = map[position]entry{}
+			s.tp = map[Position]entry{}
 		}
 	}
 
 	return bestScore
 }
 
-func (s *searcher) search(pos position, maxNodes int) (m move) {
+func (s *Searcher) Search(pos Position, maxNodes int) (m Move) {
 	s.nodes = 0
 	for depth := 1; depth < 99; depth++ {
 		lower, upper := -3*MateValue, 3*MateValue
